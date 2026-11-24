@@ -1,0 +1,52 @@
+{
+  "accepted_publications": 86400,
+  "clients": 240,
+  "connected_idle_from": "2026-11-23T22:26:10.389276-06:00",
+  "delivered_before_window_end": 1693513,
+  "delivered_during_drain": 0,
+  "delivered_per_s": 1411.2608333333333,
+  "delivery_latency_ms": {
+    "max": 18.226,
+    "p50": 1.408,
+    "p95": 3.316,
+    "p99": 4.852
+  },
+  "drain_s": 10,
+  "duplicates": 0,
+  "duration_s": 1200,
+  "expected_deliveries": 1693513,
+  "failed_connection_attempts": 0,
+  "guard_ms": 200,
+  "invalid_or_misrouted": 0,
+  "max_lifetime_s": 35,
+  "measuring_from": "2026-11-23T22:27:14.389757-06:00",
+  "measuring_to": "2026-11-23T22:47:14.389757-06:00",
+  "min_lifetime_s": 15,
+  "missing_deliveries": 0,
+  "offered_publications_per_s": 72,
+  "planned_disconnects": 11449,
+  "publish_errors": 0,
+  "publishing_from": "2026-11-23T22:26:14.389757-06:00",
+  "publishing_to": "2026-11-23T22:47:14.377068-06:00",
+  "received_outside_eligible_windows": 27360,
+  "receiving_to": "2026-11-23T22:47:24.378772-06:00",
+  "reconnect_latency_ms": {
+    "max": 177.211,
+    "p50": 102.138,
+    "p95": 105.106,
+    "p99": 106.806
+  },
+  "reconnects_completed": 11449,
+  "reconnects_incomplete": 0,
+  "rooms": 12,
+  "schedule_lag_ms": {
+    "max": 119.576,
+    "p50": 0.975,
+    "p95": 1.497,
+    "p99": 2.079
+  },
+  "seed": 20261123,
+  "unexpected_disconnects": 0,
+  "unique_deliveries": 1693513,
+  "warmup_s": 60
+}
