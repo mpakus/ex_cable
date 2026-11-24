@@ -1,6 +1,8 @@
 # ExCable, Cabby and Action Cable benchmark
 
 See the [November 24 capacity sweep](capacity.md) for the newer HTTP ingress and fan-out measurements.
+The [fan-out experiments](fanout-research/README.md) compare three possible ExCable optimizations with the stock release.
+The [four-frame write benchmark](batch4/README.md) measures the batching prototype against stock ExCable and Cabby at a matched delivery rate and at saturation.
 
 All three servers sustained 36,000 deliveries/s with zero missing deliveries in
 the highest steady workload. Cabby had the smallest gateway RSS. During the soak, all

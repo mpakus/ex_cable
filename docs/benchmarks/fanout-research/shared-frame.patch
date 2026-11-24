@@ -1,0 +1,63 @@
+--- a/lib/ex_cable/broadcast.ex
++++ b/lib/ex_cable/broadcast.ex
+@@ -77,12 +77,21 @@
+     ExCable.Stats.increment(:publications)
+ 
+     Registry.dispatch(@registry, {:stream, stream}, fn entries ->
+-      Enum.each(entries, fn
+-        {_, {_, _, ^excluded, _}} ->
+-          :ok
++      Enum.reduce(entries, nil, fn
++        {_, {_, _, ^excluded, _}}, cached ->
++          cached
+ 
+-        {pid, {identifier, membership, _, budget}} ->
+-          enqueue(pid, budget, {:broadcast, stream, identifier, membership, data})
++        {pid, {identifier, membership, _, budget}}, cached ->
++          {_, frame} = next = case cached do
++            {^identifier, _} -> cached
++            _ ->
++              bytes = IO.iodata_to_binary([
++                ~s({"identifier":), JSON.encode!(identifier), ~s(,"message":), data, "}"
++              ])
++              {identifier, bytes}
++          end
++          enqueue(pid, budget, {:broadcast, stream, identifier, membership, frame})
++          next
+       end)
+     end)
+   end
+--- a/lib/ex_cable/socket.ex
++++ b/lib/ex_cable/socket.ex
+@@ -59,9 +59,8 @@
+     Broadcast.received(state.budget)
+ 
+     case state.subscriptions do
+-      %{^id => %{streams: %{^stream => ^membership}, encoded_id: encoded_id}} ->
+-        frame = {:text, [~s({"identifier":), encoded_id, ~s(,"message":), data, "}"]}
+-        {:push, frame, state}
++      %{^id => %{streams: %{^stream => ^membership}}} ->
++        {:push, {:text, data}, state}
+ 
+       _ ->
+         {:ok, state}
+--- a/test/broadcast_test.exs
++++ b/test/broadcast_test.exs
+@@ -12,7 +12,7 @@
+     for _ <- 1..200, do: assert(Broadcast.ingest(payload) == :ok)
+ 
+     for _ <- 1..128 do
+-      assert_received {:broadcast, ^stream, ^id, ^membership, "1"}
++      assert_received {:broadcast, ^stream, ^id, ^membership, ~s({"identifier":"room","message":1})}
+       Broadcast.received(budget)
+     end
+ 
+@@ -35,7 +35,7 @@
+     assert :ok == Broadcast.ingest(JSON.encode!(Map.put(event, :meta, %{exclude_socket: "sid"})))
+     refute_received {:broadcast, _, _, _, _}
+     assert :ok == Broadcast.ingest(JSON.encode!(event))
+-    assert_received {:broadcast, ^stream, ^id, ^membership, "1"}
++    assert_received {:broadcast, ^stream, ^id, ^membership, ~s({"identifier":"room","message":1})}
+   end
+ 
+   test "rejects malformed JSON, empty batches and oversized Redis publications" do

@@ -1,0 +1,79 @@
+{
+  "sampled_connections": 25,
+  "histogram": {
+    "0": 10633,
+    "1": 2995,
+    "2": 718,
+    "3": 182,
+    "4": 45,
+    "5": 10,
+    "6": 4,
+    "7": 4,
+    "8": 1,
+    "9": 1,
+    "10": 1,
+    "11": 1
+  },
+  "cpu_samples": [
+    {
+      "unix_s": 1795539301.338433,
+      "server_cpu_s": 27.9,
+      "driver_cpu_s": 19.86,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539302.3651478,
+      "server_cpu_s": 35.84,
+      "driver_cpu_s": 25.82,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539303.3940349,
+      "server_cpu_s": 43.77,
+      "driver_cpu_s": 31.92,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539304.425677,
+      "server_cpu_s": 51.46,
+      "driver_cpu_s": 37.97,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539305.458941,
+      "server_cpu_s": 59.43,
+      "driver_cpu_s": 44.06,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539306.493834,
+      "server_cpu_s": 67.42,
+      "driver_cpu_s": 50.15,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539307.52227,
+      "server_cpu_s": 75.3,
+      "driver_cpu_s": 56.15,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539308.5515509,
+      "server_cpu_s": 83.36,
+      "driver_cpu_s": 62.01,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539309.582689,
+      "server_cpu_s": 90.91,
+      "driver_cpu_s": 68.34,
+      "rails_cpu_s": 0.7
+    },
+    {
+      "unix_s": 1795539310.6147032,
+      "server_cpu_s": 98.83,
+      "driver_cpu_s": 74.36,
+      "rails_cpu_s": 0.7
+    }
+  ]
+}

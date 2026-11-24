@@ -1,0 +1,44 @@
+--- a/lib/ex_cable/socket.ex
++++ b/lib/ex_cable/socket.ex
+@@ -4,6 +4,11 @@
+ 
+   @impl true
+   def init({config, env}) do
++    if :rand.uniform(8) == 1 do
++      Process.put(:probe_tick, :rand.uniform(32))
++      Process.put(:probe_counts, %{})
++    end
++
+     sid = Base.url_encode64(:crypto.strong_rand_bytes(12), padding: false)
+ 
+     state = %{
+@@ -56,6 +61,17 @@
+   end
+ 
+   def handle_info({:broadcast, stream, id, membership, data}, state) do
++    case Process.get(:probe_tick) do
++      nil -> :ok
++      1 ->
++        {:messages, pending} = Process.info(self(), :messages)
++        count = Enum.count(Enum.take_while(Enum.take(pending, 15),
++          &match?({:broadcast, _, _, _, _}, &1)))
++        Process.put(:probe_counts, Map.update(Process.get(:probe_counts), count, 1, &(&1 + 1)))
++        Process.put(:probe_tick, 32)
++      n -> Process.put(:probe_tick, n - 1)
++    end
++
+     Broadcast.received(state.budget)
+ 
+     case state.subscriptions do
+@@ -84,6 +100,11 @@
+   def terminate(_reason, %{identifiers: nil}), do: :ok
+ 
+   def terminate(_reason, state) do
++    if counts = Process.get(:probe_counts) do
++      path = Path.join(System.fetch_env!("BENCH_PROFILE_DIR"), state.sid <> ".json")
++      File.write!(path, JSON.encode!(Map.new(counts, fn {n, v} -> {to_string(n), v} end)))
++    end
++
+     Broadcast.leave_connection(state.identifiers)
+ 
+     for {id, sub} <- state.subscriptions, stream <- Map.keys(sub.streams) do

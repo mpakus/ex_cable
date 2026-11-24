@@ -1,0 +1,135 @@
+--- a/lib/ex_cable/broadcast.ex
++++ b/lib/ex_cable/broadcast.ex
+@@ -26,7 +26,7 @@
+   def leave_connection(identifiers),
+     do: Registry.unregister(@registry, {:connection, identifiers})
+ 
+-  def received(budget), do: :atomics.sub(budget, 1, 1)
++  def received(budget), do: :atomics.sub_get(budget, 1, 1)
+ 
+   def ingest(body) when byte_size(body) <= @max_size do
+     with {:ok, payload} <- JSON.decode(body),
+--- a/lib/ex_cable/socket.ex
++++ b/lib/ex_cable/socket.ex
+@@ -55,16 +55,21 @@
+     {:push, [text(ping), {:ping, token}], %{state | awaiting_pong: token}}
+   end
+ 
+-  def handle_info({:broadcast, stream, id, membership, data}, state) do
+-    Broadcast.received(state.budget)
+-
+-    case state.subscriptions do
+-      %{^id => %{streams: %{^stream => ^membership}, encoded_id: encoded_id}} ->
+-        frame = {:text, [~s({"identifier":), encoded_id, ~s(,"message":), data, "}"]}
++  def handle_info({:broadcast, _, _, _, _} = first, state) do
++    remaining = Broadcast.received(state.budget)
++    frame = broadcast_frame(first, state)
++    extra = if remaining > 0, do: ready_broadcasts(), else: []
++
++    case extra do
++      [] when is_nil(frame) ->
++        {:ok, state}
++
++      [] ->
+         {:push, frame, state}
+ 
+       _ ->
+-        {:ok, state}
++        frames = for message <- extra, next = take_frame(message, state), do: next
++        {:push, if(frame, do: [frame | frames], else: frames), state}
+     end
+   end
+ 
+@@ -99,6 +104,39 @@
+     )
+   end
+ 
++  # Snapshot only when more broadcasts were admitted. A selective receive alone
++  # could skip a TCP command, heartbeat or disconnect in front of a broadcast.
++  defp ready_broadcasts do
++    case Process.info(self(), :message_queue_len) do
++      {:message_queue_len, n} when n in 1..128 ->
++        {:messages, queue} = Process.info(self(), :messages)
++        queue |> Enum.take(3) |> Enum.take_while(&match?({:broadcast, _, _, _, _}, &1))
++
++      _ ->
++        []
++    end
++  end
++
++  defp take_frame(message, state) do
++    receive do
++      ^message ->
++        Broadcast.received(state.budget)
++        broadcast_frame(message, state)
++    after
++      0 -> nil
++    end
++  end
++
++  defp broadcast_frame({:broadcast, stream, id, membership, data}, state) do
++    case state.subscriptions do
++      %{^id => %{streams: %{^stream => ^membership}, encoded_id: encoded_id}} ->
++        {:text, [~s({"identifier":), encoded_id, ~s(,"message":), data, "}"]}
++
++      _ ->
++        nil
++    end
++  end
++
+   defp handle_command("subscribe", id, _, state) do
+     cond do
+       Map.has_key?(state.subscriptions, id) ->
+--- a/deps/bandit/lib/bandit/websocket/connection.ex
++++ b/deps/bandit/lib/bandit/websocket/connection.ex
+@@ -427,12 +427,30 @@
+     {:error, {:shutdown, reason}, connection}
+   end
+ 
+-  defp do_deflate(msgs, socket, connection) when is_list(msgs) do
+-    Enum.reduce(msgs, {:continue, connection}, fn
+-      msg, {:continue, connection} -> do_deflate(msg, socket, connection)
+-      _msg, other -> other
+-    end)
+-  end
++  defp do_deflate([_, _ | _] = frames, %ThousandIsland.Socket{} = socket, %{compress: nil} = connection)
++       when length(frames) <= 4 do
++    if Enum.all?(frames, &match?({:text, _}, &1)) do
++      {wire, bytes} =
++        Enum.map_reduce(frames, 0, fn {:text, data}, total ->
++          {Frame.serialize(%Frame.Text{fin: true, data: data, compressed: false}),
++           total + IO.iodata_length(data)}
++        end)
++
++      case ThousandIsland.Socket.send(socket, wire) do
++        :ok ->
++          metrics = [send_text_frame_count: length(frames), send_text_frame_bytes: bytes]
++          {:continue, do_send_metrics(metrics, connection)}
++
++        {:error, reason} ->
++          do_error(1011, reason, socket, connection)
++      end
++    else
++      send_individually(frames, socket, connection)
++    end
++  end
++
++  defp do_deflate(msgs, socket, connection) when is_list(msgs),
++    do: send_individually(msgs, socket, connection)
+ 
+   defp do_deflate({opcode, data} = msg, socket, connection) when opcode in [:text, :binary] do
+     case PerMessageDeflate.deflate(data, connection.compress) do
+@@ -461,6 +479,13 @@
+       |> do_send_metrics(connection)
+ 
+     {:continue, connection}
++  end
++
++  defp send_individually(msgs, socket, connection) do
++    Enum.reduce(msgs, {:continue, connection}, fn
++      msg, {:continue, connection} -> do_deflate(msg, socket, connection)
++      _msg, other -> other
++    end)
+   end
+ 
+   defp do_inflate(frame, socket, connection) do

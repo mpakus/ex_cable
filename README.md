@@ -124,6 +124,11 @@ from 200 to 8,000 offered POSTs/s.
 
 ![Benchmark comparison of HTTP POSTs per second, WebSocket deliveries per second, and WebSocket p99 latency for ExCable, Cabby, and Action Cable](docs/benchmarks/capacity-comparison.svg)
 
+Batching up to four ready WebSocket frames per write raised ExCable's saturation throughput by **33.4%** in a
+separate comparison. The prototype delivered **465,111/s**, stock ExCable **348,637/s**, and
+Cabby **463,504/s**. At 288,000 deliveries/s, their respective p99s were **1.648 ms**,
+**1.669 ms**, and **1.512 ms**. [Prototype results and trial ranges](docs/benchmarks/batch4/README.md)
+
 ### HTTP ingress
 
 128 concurrent publishers, eight measured seconds and zero WebSocket subscribers.
