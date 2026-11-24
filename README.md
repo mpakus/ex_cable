@@ -6,6 +6,7 @@ application over AnyCable HTTP RPC. Existing `@rails/actioncable` clients and co
 channels use the same messages and identifiers.
 
 Bandit runs one BEAM process per socket. Each process owns its connection and subscription state.
+A socket sends up to four ready broadcast frames per write. A lone frame goes out immediately.
 A partitioned OTP Registry routes broadcasts directly to local sockets. Redis Pub/Sub distributes
 Rails broadcasts and remote disconnects across instances.
 
@@ -20,7 +21,8 @@ flowchart LR
 
 ## Run with Rails
 
-Use Elixir 1.19 and Erlang/OTP 28. Install the Elixir dependencies.
+Use Elixir 1.19 and Erlang/OTP 28. Building ExCable also requires `patch` on the build host
+for the pinned Bandit 1.15.0 transport change. Install the Elixir dependencies.
 
 ```sh
 rtk proxy mix deps.get
@@ -108,8 +110,36 @@ shows rates between successful samples, refreshing about once per second.
 
 ## Benchmark results
 
+**Four-frame WebSocket writes are the default.** In three serial saturation trials per
+server, batching raised median ExCable fan-out by **33.4%**, from **348,637** to
+**465,111 deliveries/s**. Cabby delivered **463,504/s**. The faster server varied by
+trial. At a matched 288,000 deliveries/s, delivery p99 was 1.648 ms for batched ExCable,
+1.669 ms for stock, and 1.512 ms for Cabby. [Capacity comparison and trial ranges](docs/benchmarks/batch4/README.md)
+
+### One-hour reconnect churn
+
+Each server ran an hour of evenly paced traffic and an hour of room bursts with 240
+reconnecting clients. In the burst run, batching lowered ExCable delivery p99 by **31%**
+while adding **1.37 MiB** of late gateway RSS. All six runs delivered every eligible
+message and completed every planned reconnect.
+
+| Room bursts | Gateway RSS, final 5 min | Delivery p99 | Reconnect p99 | Missing / eligible | Completed / planned reconnects |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Stock ExCable | 188.51 MiB | 2.566 ms | 107.173 ms | 0 / 5,080,085 | 34,404 / 34,404 |
+| **Four-frame ExCable** | **189.88 MiB** | **1.770 ms** | **107.029 ms** | **0 / 5,080,100** | **34,404 / 34,404** |
+| Cabby | 20.91 MiB | 1.697 ms | 106.496 ms | 0 / 5,080,085 | 34,404 / 34,404 |
+
+![Gateway RSS and its change over both hours of evenly paced and burst traffic](docs/benchmarks/batch4/churn/rss.png)
+
+![Delivery and reconnect p99 under evenly paced traffic and room bursts](docs/benchmarks/batch4/churn/latency.png)
+
+All subjects shared one Apple M4 Max. Reconnect p99 includes the client's 100 ms retry
+delay. [Full churn report, raw data and reproduction commands](docs/benchmarks/batch4/churn/README.md)
+
+### Historical comparison with Rails Action Cable
+
 Loopback on an Apple M4 Max. Each row reports the median of three runs at the same load.
-The [full sweep](docs/benchmarks/capacity.md) covers 8–256 HTTP publishers and fan-out loads
+The [pre-batching sweep](docs/benchmarks/capacity.md) covers 8–256 HTTP publishers and fan-out loads
 from 200 to 8,000 offered POSTs/s.
 
 **Cabby led on throughput. ExCable had the lowest WebSocket delivery p99 under saturation.**
@@ -124,12 +154,7 @@ from 200 to 8,000 offered POSTs/s.
 
 ![Benchmark comparison of HTTP POSTs per second, WebSocket deliveries per second, and WebSocket p99 latency for ExCable, Cabby, and Action Cable](docs/benchmarks/capacity-comparison.svg)
 
-Batching up to four ready WebSocket frames per write raised ExCable's saturation throughput by **33.4%** in a
-separate comparison. The prototype delivered **465,111/s**, stock ExCable **348,637/s**, and
-Cabby **463,504/s**. At 288,000 deliveries/s, their respective p99s were **1.648 ms**,
-**1.669 ms**, and **1.512 ms**. [Prototype results and trial ranges](docs/benchmarks/batch4/README.md)
-
-### HTTP ingress
+#### HTTP ingress
 
 128 concurrent publishers, eight measured seconds and zero WebSocket subscribers.
 
@@ -139,7 +164,7 @@ Cabby **463,504/s**. At 288,000 deliveries/s, their respective p99s were **1.648
 | Cabby | 164,366 | 1,314,929 | 1.09 / 1.94 |
 | Action Cable | 28,007 | 224,057 | 5.18 / 5.64 |
 
-### WebSocket fan-out
+#### WebSocket fan-out
 
 240 subscribers in one room, eight concurrent publishers and an offered load of 8,000 POSTs/s.
 Throughput counts completions within the ten-second window. Unsent POSTs are per-run medians.

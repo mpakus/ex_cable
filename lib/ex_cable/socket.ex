@@ -55,16 +55,21 @@ defmodule ExCable.Socket do
     {:push, [text(ping), {:ping, token}], %{state | awaiting_pong: token}}
   end
 
-  def handle_info({:broadcast, stream, id, membership, data}, state) do
-    Broadcast.received(state.budget)
+  def handle_info({:broadcast, _, _, _, _} = first, state) do
+    remaining = Broadcast.received(state.budget)
+    frame = broadcast_frame(first, state)
+    extra = if remaining > 0, do: ready_broadcasts(), else: []
 
-    case state.subscriptions do
-      %{^id => %{streams: %{^stream => ^membership}, encoded_id: encoded_id}} ->
-        frame = {:text, [~s({"identifier":), encoded_id, ~s(,"message":), data, "}"]}
+    case extra do
+      [] when is_nil(frame) ->
+        {:ok, state}
+
+      [] ->
         {:push, frame, state}
 
       _ ->
-        {:ok, state}
+        frames = for message <- extra, next = take_frame(message, state), do: next
+        {:push, if(frame, do: [frame | frames], else: frames), state}
     end
   end
 
@@ -97,6 +102,39 @@ defmodule ExCable.Socket do
       state.env,
       Map.keys(state.subscriptions)
     )
+  end
+
+  # Snapshot only when more broadcasts were admitted. A selective receive alone
+  # could skip a TCP command, heartbeat or disconnect in front of a broadcast.
+  defp ready_broadcasts do
+    case Process.info(self(), :message_queue_len) do
+      {:message_queue_len, n} when n in 1..128 ->
+        {:messages, queue} = Process.info(self(), :messages)
+        queue |> Enum.take(3) |> Enum.take_while(&match?({:broadcast, _, _, _, _}, &1))
+
+      _ ->
+        []
+    end
+  end
+
+  defp take_frame(message, state) do
+    receive do
+      ^message ->
+        Broadcast.received(state.budget)
+        broadcast_frame(message, state)
+    after
+      0 -> nil
+    end
+  end
+
+  defp broadcast_frame({:broadcast, stream, id, membership, data}, state) do
+    case state.subscriptions do
+      %{^id => %{streams: %{^stream => ^membership}, encoded_id: encoded_id}} ->
+        {:text, [~s({"identifier":), encoded_id, ~s(,"message":), data, "}"]}
+
+      _ ->
+        nil
+    end
   end
 
   defp handle_command("subscribe", id, _, state) do

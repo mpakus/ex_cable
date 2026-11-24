@@ -1,6 +1,6 @@
 # Four ready WebSocket frames per write
 
-Batching lifted ExCable's median saturation throughput from **348,637 to 465,111 deliveries/s**, a **33.4% increase**. Cabby delivered **463,504/s**. The prototype led Cabby by 0.35% on the medians, but the faster server changed between rounds. At a matched 288,000 deliveries/s, Cabby had the lowest delivery p99. The patch remains an opt-in benchmark build.
+Batching lifted ExCable's median saturation throughput from **348,637 to 465,111 deliveries/s**, a **33.4% increase**. Cabby delivered **463,504/s**. The prototype led Cabby by 0.35% on the medians, but the faster server changed between rounds. At a matched 288,000 deliveries/s, Cabby had the lowest delivery p99. Four-frame writes became the default after the [hour-long churn comparisons](churn/README.md).
 
 ## Delivery latency at the same rate
 
@@ -53,15 +53,19 @@ Throughput counts unique, eligible deliveries decoded before the ten-second wind
 
 ## Ordering and slow consumers
 
-Three integration tests observe actual transport sends and decode their bytes. They check the four-frame cap, order across a heartbeat and a stale subscription, immediate delivery of a single message, and overflow of a stalled subscriber. With one socket suspended, 128 admitted broadcasts drained in exactly 32 writes of four. The reconnectable disconnect followed those writes, and another client received all 161 of its broadcasts. The isolated release source passed all 28 ExUnit tests with the Rails and Valkey fixtures enabled. [Tests](../../../bench/batch4/batch4_test.exs)
+Three prototype integration tests observed actual transport sends and decoded their bytes. They checked the four-frame cap, order across a heartbeat and a stale subscription, immediate delivery of a single message, and overflow of a stalled subscriber. With one socket suspended, 128 admitted broadcasts drained in exactly 32 writes of four. The reconnectable disconnect followed those writes, and another client received all 161 of its broadcasts. The isolated prototype passed all 28 ExUnit tests with the Rails and Valkey fixtures enabled. The default build also tests a remote disconnect between broadcasts and an isolated stale message. [Current tests](../../../test/batch4_test.exs)
 
 ## Reproduce
 
-Use the [fixture and driver setup](../README.md#reproduce) to set `BENCH_DRIVER`, `CABBY_BIN` and `BENCH_RUBY`. Set `EX_CABLE_TEST_VALKEY` to a Valkey server executable and make the fixture gems available to Ruby. Run from the stock ExCable checkout with its locked dependencies fetched. The preparation script copies the project and dependency sources into a new directory and patches that copy.
+Use the [fixture and driver setup](../README.md#reproduce) to set `BENCH_DRIVER`, `CABBY_BIN` and `BENCH_RUBY`. Set `EX_CABLE_TEST_VALKEY` to a Valkey server executable and make the fixture gems available to Ruby. Run from the ExCable checkout with its locked dependencies fetched. The preparation script extracts the historical source from Git and copies the dependencies into each new directory. Its default mode applies the benchmark patch. Use `stock` to build the corresponding baseline.
 
 ```sh
 batch_dir=$(rtk proxy mktemp -d)
-rtk proxy env MIX_ENV=prod mix release --path "$batch_dir/stock"
+rtk proxy sh bench/batch4/prepare.sh "$batch_dir/stock-source" stock
+(
+  cd "$batch_dir/stock-source" || exit 1
+  rtk proxy env MIX_ENV=prod mix release --path "$batch_dir/stock"
+)
 rtk proxy sh bench/batch4/prepare.sh "$batch_dir/source"
 (
   cd "$batch_dir/source" || exit 1

@@ -1,0 +1,62 @@
+{
+  "accepted_before_window_end": 259200,
+  "accepted_http_per_s": 72,
+  "accepted_publications": 259200,
+  "attempted_publications": 259200,
+  "clients": 240,
+  "connected_idle_from": "2026-11-24T13:06:04.051131-06:00",
+  "delivered_before_window_end": 5080259,
+  "delivered_during_drain": 0,
+  "delivered_per_s": 1411.1830555555555,
+  "delivery_latency_ms": {
+    "max": 125.602,
+    "p50": 0.338,
+    "p95": 0.714,
+    "p99": 1.231
+  },
+  "drain_s": 10,
+  "duplicates": 0,
+  "duration_s": 3600,
+  "expected_deliveries": 5080259,
+  "failed_connection_attempts": 0,
+  "guard_ms": 200,
+  "http_latency_ms": {
+    "max": 125.384,
+    "p50": 0.215,
+    "p95": 0.452,
+    "p99": 0.791
+  },
+  "invalid_or_misrouted": 0,
+  "max_lifetime_s": 35,
+  "measuring_from": "2026-11-24T13:07:08.052396-06:00",
+  "measuring_to": "2026-11-24T14:07:08.052396-06:00",
+  "min_lifetime_s": 15,
+  "missing_deliveries": 0,
+  "offered_publications_per_s": 72,
+  "planned_disconnects": 34404,
+  "publish_errors": 0,
+  "publishing_from": "2026-11-24T13:06:08.052396-06:00",
+  "publishing_to": "2026-11-24T14:07:08.036505-06:00",
+  "received_outside_eligible_windows": 82180,
+  "receiving_to": "2026-11-24T14:07:18.038915-06:00",
+  "reconnect_latency_ms": {
+    "max": 173.98,
+    "p50": 102.528,
+    "p95": 104.419,
+    "p99": 105.6
+  },
+  "reconnects_completed": 34404,
+  "reconnects_incomplete": 0,
+  "rooms": 12,
+  "schedule_lag_ms": {
+    "max": 112.397,
+    "p50": 0.641,
+    "p95": 2.042,
+    "p99": 2.095
+  },
+  "seed": 20261123,
+  "skipped_publications": 0,
+  "unexpected_disconnects": 0,
+  "unique_deliveries": 5080259,
+  "warmup_s": 60
+}

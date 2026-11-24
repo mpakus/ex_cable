@@ -26,7 +26,7 @@ defmodule ExCable.Broadcast do
   def leave_connection(identifiers),
     do: Registry.unregister(@registry, {:connection, identifiers})
 
-  def received(budget), do: :atomics.sub(budget, 1, 1)
+  def received(budget), do: :atomics.sub_get(budget, 1, 1)
 
   def ingest(body) when byte_size(body) <= @max_size do
     with {:ok, payload} <- JSON.decode(body),

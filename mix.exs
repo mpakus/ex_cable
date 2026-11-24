@@ -1,3 +1,5 @@
+Code.require_file("mix/compile_bandit_batch.exs", __DIR__)
+
 defmodule ExCable.MixProject do
   use Mix.Project
 
@@ -9,8 +11,9 @@ defmodule ExCable.MixProject do
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       test_coverage: [ignore_modules: [ExCable.TestReplica, ExCable.TestRPC, ExCable.TestWire]],
+      compilers: [:bandit_batch | Mix.compilers()],
       deps: [
-        {:bandit, "~> 1.15.0"},
+        {:bandit, "== 1.15.0"},
         {:finch, "~> 0.25.0"},
         {:redix, "~> 1.10.0"},
         {:mint_web_socket, "~> 1.0", only: :test}

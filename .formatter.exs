@@ -1,3 +1,3 @@
 [
-  inputs: ["mix.exs", "bench/*.ex", "{config,lib,test}/**/*.{ex,exs}"]
+  inputs: ["mix.exs", "bench/*.ex", "bench/batch4/*.exs", "{config,lib,mix,test}/**/*.{ex,exs}"]
 ]

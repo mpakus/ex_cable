@@ -3,6 +3,20 @@ defmodule ExCable.CLITest do
   import ExUnit.CaptureIO
   alias ExCable.TestWire, as: Wire
 
+  test "the terminal command explains its options and reports unavailable statistics" do
+    assert capture_io(fn -> :ok = Mix.Tasks.Cli.run(["--help"]) end) =~ "--follow"
+    assert {:error, "Set EX_CABLE_STATS_KEY"} = ExCable.CLI.run([], "")
+    assert {:error, "Invalid arguments." <> _} = ExCable.CLI.run(["--unknown"], "stats")
+
+    assert {:error, "Expected an HTTP(S) base URL" <> _} =
+             ExCable.CLI.run(["--url", "/"], "stats")
+
+    port = Wire.listen({ExCable.HTTP, ExCable.Config.defaults()})
+
+    assert {:error, "Statistics endpoint not found (HTTP 404)"} =
+             ExCable.CLI.run(["--url", url(port)], "stats")
+  end
+
   test "statistics require the configured key" do
     disabled = Wire.listen({ExCable.HTTP, ExCable.Config.defaults()})
     enabled = Wire.listen({ExCable.HTTP, %{ExCable.Config.defaults() | stats_key: "stats"}})

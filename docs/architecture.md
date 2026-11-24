@@ -27,10 +27,18 @@ socket exits.
 
 A broadcast validates its JSON once and shares the encoded payload with matching socket
 processes. The socket combines the payload with the saved encoded subscription identifier.
+It sends up to four consecutive ready broadcasts in one transport write. A lone frame leaves
+immediately. A heartbeat, inbound command or disconnect at the front of the mailbox ends the
+batch. Each frame retains its WebSocket boundary and membership check.
 Each socket permits up to 128 pending fan-out events. Overflow triggers a reconnect and stops
 further enqueueing for that socket. Bandit applies a socket send timeout and caps both incoming
 frame size and the size of reassembled fragmented messages. This bounds the cost of slow or
 nonresponsive peers without putting other clients behind their writes.
+
+The build pins Bandit 1.15.0 and applies a [transport patch](../mix/bandit-1.15.0.patch) to
+the compiled module in the current Mix build. Mixed control frames and compressed frames
+follow Bandit's individual send path. The [build task](../mix/compile_bandit_batch.exs)
+leaves the downloaded Hex source intact.
 
 Rails RPCs execute in connection order through a shared Finch pool. A command RPC failure
 ends the session with a reconnect hint. Rails side effects may have committed before a transport

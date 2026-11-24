@@ -8,7 +8,7 @@ defmodule ExCable.Batch4Test do
       Wire.listen(
         {ExCable.TestRPC,
          fn
-           "/rpc/connect", _, _ -> {200, %{status: 1}}
+           "/rpc/connect", _, _ -> {200, %{status: 1, identifiers: "batch4-user"}}
            "/rpc/command", _, _ -> {200, %{status: 1, streams: ["batch4"]}}
            "/rpc/disconnect", _, _ -> {200, %{status: 1}}
          end}
@@ -68,6 +68,39 @@ defmodule ExCable.Batch4Test do
     publish(10)
     assert next_write(ctx.client) == [10]
     Wire.close(read_event(10, ctx.client))
+  end
+
+  test "a stale broadcast is discarded before the next heartbeat", ctx do
+    :atomics.add(ctx.budget, 1, 1)
+    send(ctx.pid, {:broadcast, "batch4", "room", make_ref(), "999"})
+    send(ctx.pid, :heartbeat)
+    assert next_write(ctx.client) == ["ping"]
+    assert next_write(ctx.client) == [:ping]
+    assert :atomics.get(ctx.budget, 1) == 0
+    Wire.close(ctx.client)
+  end
+
+  test "a queued remote disconnect precedes later broadcasts", ctx do
+    while_suspended(ctx.pid, fn ->
+      publish(1)
+      publish(2)
+
+      assert :ok =
+               Broadcast.ingest(
+                 JSON.encode!(%{command: "disconnect", payload: %{identifier: "batch4-user"}})
+               )
+
+      publish(3)
+    end)
+
+    client = Enum.reduce(1..2, ctx.client, &read_event/2)
+
+    assert {%{"type" => "disconnect", "reason" => "remote", "reconnect" => false}, client} =
+             Wire.event(client)
+
+    assert next_write(client) == [1, 2]
+    assert next_write(client) == ["disconnect"]
+    Wire.close(client)
   end
 
   test "a stalled socket drains its 128 admitted broadcasts before disconnecting", ctx do
