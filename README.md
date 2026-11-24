@@ -87,6 +87,37 @@ MIX_ENV=prod rtk proxy mix release
 rtk proxy _build/prod/rel/ex_cable/bin/ex_cable start
 ```
 
+## Benchmark results
+
+Loopback on an Apple M4 Max. Each row reports the median of three runs at the same load.
+The [full sweep](docs/benchmarks/capacity.md) covers 8–256 HTTP publishers and fan-out loads
+from 200 to 8,000 offered POSTs/s.
+
+### HTTP ingress
+
+128 concurrent publishers, eight measured seconds and zero WebSocket subscribers.
+
+| Server | Accepted POSTs/s | Accepted POSTs in 8 s | HTTP p95 / p99 (ms) |
+| --- | ---: | ---: | ---: |
+| ExCable | 158,494 | 1,267,954 | 2.17 / 3.59 |
+| Cabby | 164,366 | 1,314,929 | 1.09 / 1.94 |
+| Action Cable | 28,007 | 224,057 | 5.18 / 5.64 |
+
+### WebSocket fan-out
+
+240 subscribers in one room, eight concurrent publishers and an offered load of 8,000 POSTs/s.
+Throughput counts completions within the ten-second window. Unsent POSTs are per-run medians.
+Missing deliveries are counted after a six-second drain and totaled across the three runs.
+
+| Server | Accepted POSTs/s | WebSocket deliveries/s | Delivery p95 / p99 (ms) | Unsent POSTs | Missing deliveries |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| ExCable | 1,434 | 344,177 | 6.59 / 9.58 | 65,652 | 0 |
+| Cabby | 1,968 | 471,980 | 21.65 / 88.31 | 60,317 | 0 |
+| Action Cable | 249 | 59,810 | 43.42 / 46.03 | 77,499 | 0 |
+
+At 1,200 offered POSTs/s, ExCable and Cabby each delivered about 288,000 messages/s
+with zero unsent POSTs. Action Cable delivered about 64,000 messages/s at that load.
+
 ## Testing
 
 ### Unit and integration tests
@@ -123,7 +154,9 @@ rtk proxy go -C bench build -o /tmp/excable-bench .
 
 See the [comparison and soak commands](docs/benchmarks/README.md#reproduce) and the
 [BEAM memory investigation](docs/benchmarks/beam-memory.md) for the matching workload,
-release profiles and raw data.
+release profiles and raw data. In the matched 20-minute churn test, the Darwin allocator
+setting reduced peak ExCable RSS from 207.45 to 191.42 MiB. Both profiles completed 11,449
+planned reconnects with zero missing deliveries.
 
 [Architecture](docs/architecture.md) · [Protocols and compatibility](docs/protocol.md) ·
 [Development plan](docs/plan.md) · [Tasks](docs/tasks.md) · [Benchmarks](docs/benchmarks/README.md)

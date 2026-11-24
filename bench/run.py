@@ -149,12 +149,17 @@ def run_one(args, name, rate, repeat):
         workload = ["-clients=240", "-rooms=12", "-warmup=60s", "-duration=" + args.soak_duration,
                     "-lifetime-min=15s", "-lifetime-max=35s", "-drain=10s"]
         interval, settle = 5, 30
+    elif args.scenario == "ingress":
+        workload = ["-ingress", f"-publishers={rate}", "-warmup=" + args.warmup, "-duration=" + args.duration]
+        interval, settle = 1, 0
     elif args.scenario == "smoke":
         workload = ["-clients=12", "-rooms=3", "-warmup=2s", "-duration=6s",
                     "-lifetime-min=1500ms", "-lifetime-max=3500ms", "-idle=1s", "-drain=2s"]
         interval, settle = 0.5, 2
     else:
-        workload = ["-clients=240", "-rooms=1", "-warmup=4s", "-duration=15s", "-drain=5s"]
+        workload = [f"-clients={args.clients}", "-rooms=1", "-warmup=" + args.warmup,
+                    "-duration=" + args.duration, "-idle=" + args.idle, "-drain=" + args.drain,
+                    f"-publishers={args.publishers}"]
         interval, settle = 1, 5
 
     with ExitStack() as stack:
@@ -164,7 +169,7 @@ def run_one(args, name, rate, repeat):
             raise RuntimeError(f"{out}: BEAM memory probe failed during startup")
         summary = stack.enter_context((out / "load.json").open("w"))
         csv_file = stack.enter_context((out / "rss.csv").open("w", newline=""))
-        writer = csv.writer(csv_file)
+        writer = csv.writer(csv_file, lineterminator="\n")
         writer.writerow(("timestamp_utc", "phase", "server_kib", "rails_rpc_kib", "combined_kib"))
 
         def sample(phase):
@@ -198,14 +203,17 @@ def run_one(args, name, rate, repeat):
             (out / "collect").unlink()
             (out / "collected").unlink()
     result = json.loads((out / "load.json").read_text())
-    print(f"{now()} {args.scenario} {name} rate={rate} repeat={repeat} "
-          f"{result['unique_deliveries']}/{result['expected_deliveries']} delivered, "
-          f"{result['reconnects_completed']} reconnects", flush=True)
+    deliveries = ""
+    if args.scenario != "ingress":
+        deliveries = (f", {result['unique_deliveries']}/{result['expected_deliveries']} delivered"
+                      f", {result['reconnects_completed']} reconnects")
+    print(f"{now()} {args.scenario} {name} level={rate} repeat={repeat} "
+          f"{result['accepted_http_per_s']:.1f} HTTP/s{deliveries}", flush=True)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("scenario", choices=("smoke", "steady", "soak"))
+    parser.add_argument("scenario", choices=("smoke", "steady", "ingress", "soak"))
     parser.add_argument("--driver", required=True)
     parser.add_argument("--cabby")
     parser.add_argument("--ruby", required=True)
@@ -214,6 +222,13 @@ def main():
     parser.add_argument("--servers", nargs="+", choices=SERVERS, default=SERVERS)
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--soak-duration", default="20m")
+    parser.add_argument("--levels", type=int, nargs="+", help="Publication rates for steady or publisher counts for ingress")
+    parser.add_argument("--clients", type=int, default=240)
+    parser.add_argument("--publishers", type=int, default=1)
+    parser.add_argument("--duration", default="15s")
+    parser.add_argument("--warmup", default="4s")
+    parser.add_argument("--idle", default="4s")
+    parser.add_argument("--drain", default="5s")
     parser.add_argument("--beam-probe", type=Path, help="Directory with the compiled BEAM memory probe")
     args = parser.parse_args()
     if "cabby" in args.servers and not args.cabby:
@@ -232,9 +247,10 @@ def main():
             for task in tasks:
                 task.result()
     else:
-        rates = (50, 150) if args.scenario == "steady" else (12,)
+        defaults = {"steady": (50, 150), "ingress": (8, 32, 64), "smoke": (12,)}
+        rates = args.levels or defaults[args.scenario]
         order = list(args.servers)
-        for i in range(args.rounds if args.scenario == "steady" else 1):
+        for i in range(args.rounds if args.scenario != "smoke" else 1):
             for j, rate in enumerate(rates):
                 for k in range(len(order)):
                     run_one(args, order[(i + j + k) % len(order)], rate, i + 1)

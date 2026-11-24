@@ -1,5 +1,7 @@
 # ExCable, Cabby and Action Cable benchmark
 
+See the [November 24 capacity sweep](capacity.md) for the newer HTTP ingress and fan-out measurements.
+
 All three servers sustained 36,000 deliveries/s with zero missing deliveries in
 the highest steady workload. Cabby had the smallest gateway RSS. During the soak, all
 three delivered roughly 1,411 eligible events/s and completed every planned reconnect.
@@ -59,8 +61,8 @@ sampled 30 seconds after the load driver exits.
 
 ExCable's primary-process RSS rose by 18.4 MiB between the first and last minute medians.
 Cabby and native Action Cable rose by 0.2 and 1.1 MiB, respectively. The sample establishes
-an RSS trend for this run. A longer measurement with BEAM allocator and live heap metrics
-would help explain the increase.
+an RSS trend for this run. The [BEAM memory investigation](beam-memory.md) measures the allocator and process heaps
+and compares the Darwin release tuning.
 
 ## Workload and method
 

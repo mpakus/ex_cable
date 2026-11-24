@@ -1,5 +1,60 @@
 # BEAM memory under connection churn
 
+## Matched 20-minute soak
+
+On the Apple M4 Max test host, changing the Darwin release's binary allocator threshold from
+512 to 256 KiB reduced last-minute ExCable RSS by 11.48 MiB and peak measured RSS by
+16.03 MiB. RSS still rose 4.41 MiB over the run, down from
+7.75 MiB. The last-minute medians show about 40–41 MiB of allocated binary blocks in either
+profile. Carrier capacity fell by 27.85 MiB as large buffers moved to
+single-block carriers. The matched result ties the RSS reduction to the binary allocator layout. Process heaps
+and registry counts were comparable.
+
+![Matched soak with RSS, binary allocator blocks and carriers, and occupied process heaps](beam-memory.svg)
+
+| Memory metric (MiB) | Before, first / last / peak | After, first / last / peak |
+| --- | ---: | ---: |
+| ExCable process RSS | 194.55 / 202.30 / 207.45 | 186.41 / 190.82 / 191.42 |
+| Combined ExCable and Rails RPC RSS | 271.37 / 280.58 / 285.34 | 263.48 / 268.98 / 269.64 |
+| Binary allocator blocks | 40.56 / 40.05 / 54.31 | 40.69 / 41.38 / 53.33 |
+| Binary allocator carriers | 73.53 / 74.53 / 90.53 | 46.97 / 46.68 / 59.23 |
+| Binary single-block carriers | 0.00 / 0.00 / 0.00 | 39.06 / 39.65 / 51.95 |
+| Process heap allocator blocks | 17.47 / 17.92 / 19.40 | 17.98 / 18.12 / 19.19 |
+| Process heap allocator carriers | 40.76 / 36.63 / 42.77 | 38.77 / 39.02 / 41.02 |
+| Occupied process heaps | 8.33 / 8.58 / 10.46 | 8.34 / 8.82 / 10.39 |
+| BEAM process memory used | 30.19 / 30.64 / 32.31 | 30.80 / 30.86 / 31.97 |
+
+First and last are medians of samples in the first and last minutes of the measured window.
+Peak is the maximum sampled in that window. Combined RSS includes the independent Rails RPC
+process. The median number of live registry entries was 478 at both ends of both runs.
+
+| Delivery metric | Before | After |
+| --- | ---: | ---: |
+| Delivered messages/s | 1,411.16 | 1,411.16 |
+| Missing / eligible deliveries | 0 / 1,693,390 | 0 / 1,693,392 |
+| Delivery p95 / p99 (ms) | 1.91 / 3.08 | 1.91 / 3.13 |
+| Completed planned reconnects / unexpected disconnects | 11,449 / 0 | 11,449 / 0 |
+| Reconnect p95 / p99 (ms) | 107.44 / 109.33 | 107.45 / 109.27 |
+
+Each run accepted all 86,400 publications and reported zero duplicates, misroutes, failed
+connection attempts or incomplete reconnects.
+
+| After drain | Baseline, pre-GC / post-GC | Tuned, pre-GC / post-GC |
+| --- | ---: | ---: |
+| ExCable process RSS (MiB) | 199.48 / 192.45 | 190.17 / 180.72 |
+| Occupied process heaps (MiB) | 5.75 / 0.63 | 5.08 / 0.63 |
+| Binary allocator blocks (MiB) | 14.20 / 14.13 | 14.17 / 14.10 |
+| Binary allocator carriers (MiB) | 58.53 / 58.53 | 20.70 / 20.70 |
+| Registry entries | 0 / 0 | 0 / 0 |
+
+Major GC released occupied process heap memory in both profiles. The driver-managed binary
+blocks persisted across the collection. The tuned profile held those blocks in fewer
+carrier bytes. This comparison uses one matched run per profile on macOS. Its measurements
+cover 20 minutes of churn.
+
+[Baseline samples](memory-comparison/before/soak/072-1-excable/) ·
+[Tuned samples](memory-comparison/after/soak/072-1-excable/)
+
 ## Initial reproduction
 
 On November 24, 2026, an instrumented 20-minute run reproduced the increase. The ExCable

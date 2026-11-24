@@ -21,6 +21,8 @@ import (
 type options struct {
 	url, key                    string
 	clients, rooms, rate, seed  int
+	publishers                  int
+	ingress                     bool
 	duration, warmup, low, high time.Duration
 	guard, idle, drain, offline time.Duration
 }
@@ -52,6 +54,8 @@ func main() {
 	flag.IntVar(&o.clients, "clients", 300, "Concurrent clients")
 	flag.IntVar(&o.rooms, "rooms", 1, "Rooms")
 	flag.IntVar(&o.rate, "rate", 50, "Scheduled publications per second")
+	flag.IntVar(&o.publishers, "publishers", 1, "Maximum concurrent HTTP publishers")
+	flag.BoolVar(&o.ingress, "ingress", false, "Measure HTTP publication capacity without WebSocket subscribers")
 	flag.IntVar(&o.seed, "seed", 20261123, "Reconnect interval seed")
 	flag.DurationVar(&o.warmup, "warmup", 5*time.Second, "Unmeasured publication warmup")
 	flag.DurationVar(&o.duration, "duration", 15*time.Second, "Measurement duration")
@@ -63,11 +67,15 @@ func main() {
 	flag.DurationVar(&o.offline, "offline", 100*time.Millisecond, "Delay before attempting a reconnect")
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
-	if o.url == "" || o.clients < 1 || o.rooms < 1 || o.rooms > o.clients || o.rate < 1 ||
+	if o.url == "" || o.clients < 1 || o.rooms < 1 || o.rooms > o.clients || o.rate < 1 || o.publishers < 1 ||
 		o.low < 0 || o.high < o.low || o.duration <= 0 || o.warmup < 0 {
 		log.Fatal("Invalid workload parameters")
 	}
-	if err := run(o); err != nil {
+	workload := run
+	if o.ingress {
+		workload = runIngress
+	}
+	if err := workload(o); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -110,25 +118,7 @@ func run(o options) error {
 	start := time.Now()
 	measuredStart := start.Add(o.warmup)
 	measuredEnd := measuredStart.Add(o.duration)
-	publisher := &http.Client{Timeout: 2 * time.Second, Transport: &http.Transport{MaxIdleConnsPerHost: 1}}
-	defer publisher.CloseIdleConnections()
-	published := make([]time.Time, total)
-	scheduleLag := make([]int64, 0, measuredCount)
-	publishErrors := 0
-	log.Printf("Publishing %d events with %d events/s scheduled", total, o.rate)
-	for seq := range total {
-		scheduled := start.Add(time.Duration(seq) * time.Second / time.Duration(o.rate))
-		time.Sleep(time.Until(scheduled))
-		now := time.Now()
-		if seq >= warmupCount {
-			scheduleLag = append(scheduleLag, now.Sub(scheduled).Microseconds())
-		}
-		if put(publisher, o, seq, now) {
-			published[seq] = now
-		} else if seq >= warmupCount {
-			publishErrors++
-		}
-	}
+	publications := publish(o, start, warmupCount, total, measuredStart, measuredEnd)
 	finish := time.Now()
 	log.Print("Publisher complete, draining")
 	time.Sleep(o.drain)
@@ -136,15 +126,20 @@ func run(o options) error {
 	wsGroup.Wait()
 	end := time.Now()
 
+	published := make([]time.Time, total)
+	for seq, request := range publications {
+		if request.accepted {
+			published[seq] = request.sent
+		}
+	}
 	result := summarize(o, clients, published, warmupCount, measuredStart, measuredEnd)
+	summarizeHTTP(result, publications[warmupCount:], measuredEnd, o.duration)
 	result["connected_idle_from"] = idleStart.Format(time.RFC3339Nano)
 	result["publishing_from"] = start.Format(time.RFC3339Nano)
 	result["measuring_from"] = measuredStart.Format(time.RFC3339Nano)
 	result["measuring_to"] = measuredEnd.Format(time.RFC3339Nano)
 	result["publishing_to"] = finish.Format(time.RFC3339Nano)
 	result["receiving_to"] = end.Format(time.RFC3339Nano)
-	result["publish_errors"] = publishErrors
-	result["schedule_lag_ms"] = quantiles(scheduleLag)
 	encoder := json.NewEncoder(os.Stdout)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(result)
@@ -283,11 +278,14 @@ func (c *client) read(ws *websocket.Conn, id string, rooms, total, warmup int) {
 	}
 }
 
-func put(h *http.Client, o options, seq int, now time.Time) bool {
-	payload := mustJSON(map[string]string{
-		"stream": roomName(seq % o.rooms),
-		"data":   string(mustJSON(event{seq, now.UnixNano()})),
+func broadcastBody(room, seq int, sent time.Time) []byte {
+	return mustJSON(map[string]string{
+		"stream": roomName(room),
+		"data":   string(mustJSON(event{seq, sent.UnixNano()})),
 	})
+}
+
+func put(h *http.Client, o options, seq int, payload []byte) bool {
 	req, err := http.NewRequest(http.MethodPost, o.url+"/_broadcast", bytes.NewReader(payload))
 	if err != nil {
 		panic(err)
@@ -338,6 +336,8 @@ func summarize(o options, clients []client, published []time.Time, warmup int, s
 			accepted++
 		}
 	}
+	byRoom := orderedPublications(published, warmup, o.rooms)
+
 	for _, c := range clients {
 		duplicates += c.duplicates
 		invalid += c.invalid
@@ -362,10 +362,7 @@ func summarize(o options, clients []client, published []time.Time, warmup int, s
 			}
 		}
 		windowIndex := 0
-		for seq := c.room; seq < len(published); seq += o.rooms {
-			if seq < warmup || published[seq].IsZero() {
-				continue
-			}
+		for _, seq := range byRoom[c.room] {
 			sent := published[seq]
 			for windowIndex < len(c.windows) && !sent.Before(c.windows[windowIndex].end) {
 				windowIndex++
