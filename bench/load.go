@@ -21,7 +21,7 @@ import (
 type options struct {
 	url, key                    string
 	clients, rooms, rate, seed  int
-	publishers                  int
+	publishers, burst           int
 	ingress                     bool
 	duration, warmup, low, high time.Duration
 	guard, idle, drain, offline time.Duration
@@ -55,6 +55,7 @@ func main() {
 	flag.IntVar(&o.rooms, "rooms", 1, "Rooms")
 	flag.IntVar(&o.rate, "rate", 50, "Scheduled publications per second")
 	flag.IntVar(&o.publishers, "publishers", 1, "Maximum concurrent HTTP publishers")
+	flag.IntVar(&o.burst, "burst", 1, "Publications scheduled together for the same room")
 	flag.BoolVar(&o.ingress, "ingress", false, "Measure HTTP publication capacity without WebSocket subscribers")
 	flag.IntVar(&o.seed, "seed", 20261123, "Reconnect interval seed")
 	flag.DurationVar(&o.warmup, "warmup", 5*time.Second, "Unmeasured publication warmup")
@@ -68,7 +69,7 @@ func main() {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lmicroseconds)
 	if o.url == "" || o.clients < 1 || o.rooms < 1 || o.rooms > o.clients || o.rate < 1 || o.publishers < 1 ||
-		o.low < 0 || o.high < o.low || o.duration <= 0 || o.warmup < 0 {
+		o.burst < 1 || o.burst > o.publishers || o.low < 0 || o.high < o.low || o.duration <= 0 || o.warmup < 0 {
 		log.Fatal("Invalid workload parameters")
 	}
 	workload := run
@@ -133,6 +134,8 @@ func run(o options) error {
 		}
 	}
 	result := summarize(o, clients, published, warmupCount, measuredStart, measuredEnd)
+	result["burst_size"] = o.burst
+	result["publishers"] = o.publishers
 	summarizeHTTP(result, publications[warmupCount:], measuredEnd, o.duration)
 	result["connected_idle_from"] = idleStart.Format(time.RFC3339Nano)
 	result["publishing_from"] = start.Format(time.RFC3339Nano)

@@ -148,6 +148,8 @@ def run_one(args, name, rate, repeat):
     if args.scenario == "soak":
         workload = ["-clients=240", "-rooms=12", "-warmup=60s", "-duration=" + args.soak_duration,
                     "-lifetime-min=15s", "-lifetime-max=35s", "-drain=10s"]
+        if args.burst > 1:
+            workload += [f"-burst={args.burst}", f"-publishers={args.burst}"]
         interval, settle = 5, 30
     elif args.scenario == "ingress":
         workload = ["-ingress", f"-publishers={rate}", "-warmup=" + args.warmup, "-duration=" + args.duration]
@@ -222,6 +224,7 @@ def main():
     parser.add_argument("--servers", nargs="+", choices=SERVERS, default=SERVERS)
     parser.add_argument("--rounds", type=int, default=3)
     parser.add_argument("--soak-duration", default="20m")
+    parser.add_argument("--burst", type=int, default=1, help="Concurrent POSTs to one room per soak burst")
     parser.add_argument("--levels", type=int, nargs="+", help="Publication rates for steady or publisher counts for ingress")
     parser.add_argument("--clients", type=int, default=240)
     parser.add_argument("--publishers", type=int, default=1)
@@ -231,6 +234,8 @@ def main():
     parser.add_argument("--drain", default="5s")
     parser.add_argument("--beam-probe", type=Path, help="Directory with the compiled BEAM memory probe")
     args = parser.parse_args()
+    if args.burst < 1 or (args.burst != 1 and args.scenario != "soak"):
+        parser.error("--burst must be positive and applies to the soak scenario")
     if "cabby" in args.servers and not args.cabby:
         parser.error("--cabby is required when benchmarking Cabby")
     args.out = args.out.resolve()

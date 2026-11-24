@@ -54,8 +54,8 @@ func publish(o options, start time.Time, warmup, total int, measuredStart, measu
 		}
 	}
 
-	for seq := range total {
-		scheduled := start.Add(time.Duration(seq) * time.Second / time.Duration(o.rate))
+	dispatch := func(seq, slot int) {
+		scheduled := start.Add(time.Duration(slot) * time.Second / time.Duration(o.rate))
 		time.Sleep(time.Until(scheduled))
 		requests[seq].scheduled = scheduled
 		if o.publishers == 1 {
@@ -67,9 +67,27 @@ func publish(o options, start time.Time, warmup, total int, measuredStart, measu
 			}
 		}
 	}
+	scheduleBursts(0, warmup, o.rooms, o.burst, dispatch)
+	scheduleBursts(warmup, total, o.rooms, o.burst, dispatch)
 	close(jobs)
 	workers.Wait()
 	return requests
+}
+
+// Sequence numbers still identify rooms by seq % rooms. Visit one room at a
+// time within each block so the same socket can have several frames ready.
+func scheduleBursts(first, end, rooms, burst int, dispatch func(seq, slot int)) {
+	slot := first
+	for base := first; base < end; base += rooms * burst {
+		limit := min(end, base+rooms*burst)
+		for room := base; room < min(base+rooms, limit); room++ {
+			start := slot
+			for seq := room; seq < limit; seq += rooms {
+				dispatch(seq, start)
+				slot++
+			}
+		}
+	}
 }
 
 func runIngress(o options) error {

@@ -6,6 +6,25 @@ import (
 	"time"
 )
 
+func TestBurstScheduleKeepsRoomsAndPartialPhases(t *testing.T) {
+	for _, trial := range []struct {
+		first, end, rooms, burst int
+		want                     [][2]int
+	}{
+		{3, 8, 2, 1, [][2]int{{3, 3}, {4, 4}, {5, 5}, {6, 6}, {7, 7}}},
+		{3, 13, 2, 4, [][2]int{{3, 3}, {5, 3}, {7, 3}, {9, 3}, {4, 7}, {6, 7}, {8, 7}, {10, 7}, {11, 11}, {12, 12}}},
+		{0, 0, 3, 4, nil},
+	} {
+		var got [][2]int
+		scheduleBursts(trial.first, trial.end, trial.rooms, trial.burst, func(seq, slot int) {
+			got = append(got, [2]int{seq, slot})
+		})
+		if !reflect.DeepEqual(got, trial.want) {
+			t.Fatalf("schedule = %v, want %v", got, trial.want)
+		}
+	}
+}
+
 func TestSummarizeHTTPCountsAcceptedBeforeDeadline(t *testing.T) {
 	start := time.Unix(100, 0)
 	end := start.Add(time.Second)
