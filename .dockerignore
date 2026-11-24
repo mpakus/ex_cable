@@ -1,0 +1,12 @@
+**
+!mix.exs
+!mix.lock
+!mix/
+!mix/**
+!config/
+!config/**
+!lib/
+!lib/**
+!rel/
+!rel/**
+**/.DS_Store

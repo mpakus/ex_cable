@@ -9,4 +9,6 @@ See the [development plan](plan.md) for the order and acceptance criteria.
 - [x] Verify a real Rails connection and channel lifecycle through `anycable-rails-core`.
 - [x] Check concurrent fan-out with 32 WebSockets and 1,024 ordered deliveries.
 - [x] Build the OTP release and verify its health endpoint.
+- [x] Package the release in Docker and exercise the Rails lifecycle through the published port. [Docker guide](docker.md)
 - [x] Measure throughput, tail latency, RSS and reconnect churn against Cabby and Rails. [Benchmark report](benchmarks/README.md)
+- [x] Compare default four-frame ExCable with Cabby and native Rails at matched load and saturation. [Results](benchmarks/current/README.md)

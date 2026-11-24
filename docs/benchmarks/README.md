@@ -1,6 +1,9 @@
 # ExCable, Cabby and Action Cable benchmark
 
-See the [November 24 capacity sweep](capacity.md) for the newer HTTP ingress and fan-out measurements.
+The [current three-server comparison](current/README.md) measures the default ExCable release,
+Cabby and Rails Action Cable under matching HTTP and WebSocket workloads.
+The tables below cover the initial steady and twenty-minute churn workloads. The
+[capacity sweep](capacity.md) records the load points used to design the current comparison.
 The [fan-out experiments](fanout-research/README.md) compare three possible ExCable optimizations with the stock release.
 The [four-frame write benchmark](batch4/README.md) measures the batching prototype against stock ExCable and Cabby at a matched delivery rate and at saturation.
 The [one-hour churn comparisons](batch4/churn/README.md) cover evenly paced and burst traffic and record the decision to enable four-frame writes by default.

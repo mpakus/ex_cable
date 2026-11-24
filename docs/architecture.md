@@ -38,7 +38,8 @@ nonresponsive peers without putting other clients behind their writes.
 The build pins Bandit 1.15.0 and applies a [transport patch](../mix/bandit-1.15.0.patch) to
 the compiled module in the current Mix build. Mixed control frames and compressed frames
 follow Bandit's individual send path. The [build task](../mix/compile_bandit_batch.exs)
-leaves the downloaded Hex source intact.
+leaves the downloaded Hex source intact. Both the native release and the [Docker image](docker.md)
+use this build and the same WebSocket and Rails RPC handlers.
 
 Rails RPCs execute in connection order through a shared Finch pool. A command RPC failure
 ends the session with a reconnect hint. Rails side effects may have committed before a transport

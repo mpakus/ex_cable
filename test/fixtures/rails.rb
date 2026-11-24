@@ -56,6 +56,7 @@ class CableFixture < Rails::Application
   config.logger = Logger.new(File::NULL)
   config.secret_key_base = "fixture-only"
   config.action_cable.cable = {"adapter" => "any_cable"}
+  config.action_cable.allowed_request_origins = ["http://localhost:3000"]
 end
 
 CableFixture.initialize!

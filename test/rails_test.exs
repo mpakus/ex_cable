@@ -9,13 +9,13 @@ defmodule ExCable.RailsTest do
     {:ok, listener} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
     {:ok, {_, port}} = :inet.sockname(listener)
     secret = "cross-language-fixture"
-    config = ExCable.Config.from_env(false, &if(&1 == "ANYCABLE_SECRET", do: secret))
-
     {ruby, rails_port} = start_rails(port, secret)
     :gen_tcp.close(listener)
+    start_gateway(port, rails_port, secret)
+    assert %{status: 200, body: "ok"} = request(port, "/healthz")
 
-    config = %{config | port: port, rpc_url: "http://127.0.0.1:#{rails_port}/_anycable"}
-    ExUnit.Callbacks.start_supervised!(ExCable.HTTP.listener(config))
+    {rejected, _, 403, _, _} = Wire.open(port, [{"origin", "http://untrusted.example"}])
+    Mint.HTTP.close(rejected)
 
     denied = Wire.connect(port)
 
@@ -24,7 +24,12 @@ defmodule ExCable.RailsTest do
 
     Wire.close(denied)
 
-    headers = [{"sec-websocket-protocol", "actioncable-v1-json"}, {"cookie", "test_account=42"}]
+    headers = [
+      {"sec-websocket-protocol", "actioncable-v1-json"},
+      {"origin", "http://localhost:3000"},
+      {"cookie", "test_account=42"}
+    ]
+
     client = Wire.connect(port, headers)
     assert {%{"type" => "welcome"}, client} = Wire.event(client)
 
@@ -73,6 +78,64 @@ defmodule ExCable.RailsTest do
              await_events(rails_port, [])
 
     Port.close(ruby)
+  end
+
+  defp start_gateway(port, rails_port, secret) do
+    case System.get_env("EX_CABLE_DOCKER_IMAGE") do
+      nil ->
+        config = ExCable.Config.from_env(false, &if(&1 == "ANYCABLE_SECRET", do: secret))
+
+        config = %{
+          config
+          | port: port,
+            origins: ["http://localhost:3000"],
+            rpc_url: "http://127.0.0.1:#{rails_port}/_anycable"
+        }
+
+        start_supervised!(ExCable.HTTP.listener(config))
+
+      image ->
+        {host, network} =
+          if :os.type() == {:unix, :linux} do
+            {"127.0.0.1",
+             ["--network=host", "-e", "PORT=#{port}", "-e", "EX_CABLE_BIND=127.0.0.1"]}
+          else
+            {"host.docker.internal", ["-p", "127.0.0.1:#{port}:8080"]}
+          end
+
+        args =
+          ["run", "--detach", "--rm"] ++
+            network ++
+            [
+              "--env",
+              "ANYCABLE_SECRET=#{secret}",
+              "--env",
+              "EX_CABLE_PUBLIC_URL=http://localhost:#{port}/cable",
+              "--env",
+              "EX_CABLE_ALLOWED_ORIGINS=http://localhost:3000",
+              "--env",
+              "EX_CABLE_RPC_URL=http://#{host}:#{rails_port}/_anycable",
+              image
+            ]
+
+        {output, 0} = System.cmd("docker", args)
+        id = String.trim(output)
+        on_exit(fn -> System.cmd("docker", ["stop", id]) end)
+
+        assert Enum.any?(1..100, fn _ -> container_ready?(port) end),
+               "Container did not become ready"
+    end
+  end
+
+  defp container_ready?(port) do
+    case Finch.build(:get, "http://127.0.0.1:#{port}/healthz") |> Finch.request(ExCable.Finch) do
+      {:ok, %{status: 200}} ->
+        true
+
+      _ ->
+        Process.sleep(100)
+        false
+    end
   end
 
   defp start_rails(port, secret) do

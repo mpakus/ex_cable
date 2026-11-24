@@ -21,17 +21,10 @@ flowchart LR
 
 ## Run with Rails
 
-Use Elixir 1.19 and Erlang/OTP 28. Building ExCable also requires `patch` on the build host
-for the pinned Bandit 1.15.0 transport change. Install the Elixir dependencies.
-
-```sh
-rtk proxy mix deps.get
-```
-
 Add `gem "anycable-rails-core", require: "anycable/rails"` to the Rails Gemfile and install it
 with Bundler. Set `adapter: any_cable` in `config/cable.yml` for the active Rails environment.
-Start Rails with these environment variables. Set `ANYCABLE_SECRET` to the same random value
-for Rails and ExCable.
+Export the same random `ANYCABLE_SECRET` in both terminals. Start Rails on the host with these
+settings, then choose one of the two ways to run ExCable below.
 
 ```sh
 export ANYCABLE_HTTP_RPC=true
@@ -41,17 +34,46 @@ export ANYCABLE_WEBSOCKET_URL=ws://localhost:8080/cable
 bin/rails server
 ```
 
-Start ExCable in its own terminal.
+### Option 1 · Native Elixir
+
+Use Elixir 1.19, Erlang/OTP 28 and `patch` for the pinned Bandit transport change.
 
 ```sh
+rtk proxy mix deps.get
 export EX_CABLE_RPC_URL=http://127.0.0.1:3000/_anycable
 export EX_CABLE_PUBLIC_URL=http://localhost:8080/cable
 export EX_CABLE_ALLOWED_ORIGINS=http://localhost:3000
 rtk proxy mix run --no-halt
 ```
 
+For a production release, build and start the release in the same environment.
+
+```sh
+rtk proxy env MIX_ENV=prod mix release
+rtk proxy _build/prod/rel/ex_cable/bin/ex_cable start
+```
+
+### Option 2 · Docker
+
+With Rails on the host, build the image and start it in Docker Desktop.
+
+```sh
+rtk proxy docker build -t ex-cable:local .
+rtk proxy docker run --rm --name ex-cable -p 127.0.0.1:8080:8080 \
+  -e ANYCABLE_SECRET \
+  -e EX_CABLE_RPC_URL=http://host.docker.internal:3000/_anycable \
+  -e EX_CABLE_PUBLIC_URL=ws://localhost:8080/cable \
+  -e EX_CABLE_ALLOWED_ORIGINS=http://localhost:3000 \
+  ex-cable:local
+```
+
+Allow the RPC hostname in Rails if host authorization is enabled. Check readiness with
+`curl -fsS http://127.0.0.1:8080/healthz`. The Docker guide covers Linux Engine,
+Rails on a shared container network and the image's Rails acceptance test. [Docker guide](docs/docker.md)
+
 Point any explicit `createConsumer(url)` calls at `ws://localhost:8080/cable`. Keep the Rails
-origin allowlist aligned with ExCable's if your Rails app overrides it. In production, route
+origin allowlist aligned with ExCable's. For the example above, Rails must allow
+`http://localhost:3000` in `config.action_cable.allowed_request_origins`. In production, route
 WebSocket upgrades through your TLS proxy and keep RPC endpoints and broker traffic private.
 [Action Cable configuration](https://guides.rubyonrails.org/action_cable_overview.html#configuration) · [AnyCable HTTP RPC](https://docs.anycable.io/ruby/http_rpc)
 
@@ -83,12 +105,7 @@ Redis subscription is unavailable. Redis Pub/Sub provides live delivery with no 
 | `ANYCABLE_REDIS_CHANNEL` | `__anycable__` |
 
 A production release requires an RPC secret and either the public cable URL or an explicit
-origin list. Build and run it with those settings in the environment.
-
-```sh
-MIX_ENV=prod rtk proxy mix release
-rtk proxy _build/prod/rel/ex_cable/bin/ex_cable start
-```
+origin list. The Docker image listens on `0.0.0.0` inside the container.
 
 ## Statistics CLI
 
@@ -110,74 +127,32 @@ shows rates between successful samples, refreshing about once per second.
 
 ## Benchmark results
 
-**Four-frame WebSocket writes are the default.** In three serial saturation trials per
-server, batching raised median ExCable fan-out by **33.4%**, from **348,637** to
-**465,111 deliveries/s**. Cabby delivered **463,504/s**. The faster server varied by
-trial. At a matched 288,000 deliveries/s, delivery p99 was 1.648 ms for batched ExCable,
-1.669 ms for stock, and 1.512 ms for Cabby. [Capacity comparison and trial ranges](docs/benchmarks/batch4/README.md)
+**Cabby led on median throughput. ExCable had the lowest delivery p99 under saturation.**
+With 240 subscribers in one room, Cabby delivered **514,368 messages/s**, ExCable
+**507,084/s** and Rails Action Cable **60,599/s**. Cabby's median was 1.4% above
+ExCable's, and the faster gateway varied by trial. ExCable delivered **8.4×** the
+Rails rate. At a matched 48,000 deliveries/s, Cabby and ExCable were within **0.042 ms**
+of each other at p99.
 
-### One-hour reconnect churn
-
-Each server ran an hour of evenly paced traffic and an hour of room bursts with 240
-reconnecting clients. In the burst run, batching lowered ExCable delivery p99 by **31%**
-while adding **1.37 MiB** of late gateway RSS. All six runs delivered every eligible
-message and completed every planned reconnect.
-
-| Room bursts | Gateway RSS, final 5 min | Delivery p99 | Reconnect p99 | Missing / eligible | Completed / planned reconnects |
+| Server | HTTP POSTs/s, no subscribers | Accepted in 8 s | Saturated deliveries/s | Delivery p99 at 48k/s | Delivery p99 at saturation |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Stock ExCable | 188.51 MiB | 2.566 ms | 107.173 ms | 0 / 5,080,085 | 34,404 / 34,404 |
-| **Four-frame ExCable** | **189.88 MiB** | **1.770 ms** | **107.029 ms** | **0 / 5,080,100** | **34,404 / 34,404** |
-| Cabby | 20.91 MiB | 1.697 ms | 106.496 ms | 0 / 5,080,085 | 34,404 / 34,404 |
+| ExCable | 166,529 | 1,332,235 | 507,084 | 3.189 ms | **5.934 ms** |
+| Cabby | **167,456** | **1,339,649** | **514,368** | **3.147 ms** | 17.100 ms |
+| Rails Action Cable | 28,250 | 225,997 | 60,599 | 4.422 ms | 43.846 ms |
 
-![Gateway RSS and its change over both hours of evenly paced and burst traffic](docs/benchmarks/batch4/churn/rss.png)
+Medians of three serial trials per server and workload on one Apple M4 Max. HTTP ingress
+used 128 publishers. Fan-out used eight publishers offering 200 or 8,000 POSTs/s.
+Across all fan-out trials, clients received **36,315,360 of 36,315,360** eligible messages.
+At saturation the publishers skipped send slots on all three servers.
 
-![Delivery and reconnect p99 under evenly paced traffic and room bursts](docs/benchmarks/batch4/churn/latency.png)
+![Median HTTP ingress, saturated WebSocket deliveries and matched-load delivery p99 across three trials](docs/benchmarks/current/comparison.png)
 
-All subjects shared one Apple M4 Max. Reconnect p99 includes the client's 100 ms retry
-delay. [Full churn report, raw data and reproduction commands](docs/benchmarks/batch4/churn/README.md)
+[Workloads, trial ranges, p95/p99, RSS and raw data](docs/benchmarks/current/README.md)
 
-### Historical comparison with Rails Action Cable
-
-Loopback on an Apple M4 Max. Each row reports the median of three runs at the same load.
-The [pre-batching sweep](docs/benchmarks/capacity.md) covers 8–256 HTTP publishers and fan-out loads
-from 200 to 8,000 offered POSTs/s.
-
-**Cabby led on throughput. ExCable had the lowest WebSocket delivery p99 under saturation.**
-
-- **HTTP without subscribers.** Cabby accepted 164,366 POSTs/s, about **4% more** than
-  ExCable's 158,494. Action Cable accepted 28,007 POSTs/s.
-- **WebSocket fan-out under saturation.** Cabby delivered 471,980 messages/s, **37% more**
-  than ExCable's 344,177. Action Cable delivered 59,810/s. ExCable and Cabby delivered
-  **5.8× and 7.9×** as many messages/s as Action Cable, respectively.
-- **WebSocket tail latency at that load.** ExCable's p99 was **9.58 ms**, about **89% lower**
-  than Cabby's 88.31 ms and **79% lower** than Action Cable's 46.03 ms.
-
-![Benchmark comparison of HTTP POSTs per second, WebSocket deliveries per second, and WebSocket p99 latency for ExCable, Cabby, and Action Cable](docs/benchmarks/capacity-comparison.svg)
-
-#### HTTP ingress
-
-128 concurrent publishers, eight measured seconds and zero WebSocket subscribers.
-
-| Server | Accepted POSTs/s | Accepted POSTs in 8 s | HTTP p95 / p99 (ms) |
-| --- | ---: | ---: | ---: |
-| ExCable | 158,494 | 1,267,954 | 2.17 / 3.59 |
-| Cabby | 164,366 | 1,314,929 | 1.09 / 1.94 |
-| Action Cable | 28,007 | 224,057 | 5.18 / 5.64 |
-
-#### WebSocket fan-out
-
-240 subscribers in one room, eight concurrent publishers and an offered load of 8,000 POSTs/s.
-Throughput counts completions within the ten-second window. Unsent POSTs are per-run medians.
-Missing deliveries are counted after a six-second drain and totaled across the three runs.
-
-| Server | Accepted POSTs/s | WebSocket deliveries/s | Delivery p95 / p99 (ms) | Unsent POSTs | Missing deliveries |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| ExCable | 1,434 | 344,177 | 6.59 / 9.58 | 65,652 | 0 |
-| Cabby | 1,968 | 471,980 | 21.65 / 88.31 | 60,317 | 0 |
-| Action Cable | 249 | 59,810 | 43.42 / 46.03 | 77,499 | 0 |
-
-At 1,200 offered POSTs/s, ExCable and Cabby each delivered about 288,000 messages/s
-with zero unsent POSTs. Action Cable delivered about 64,000 messages/s at that load.
+**One-hour churn.** With four-frame writes, ExCable delivered all 5,080,100 eligible
+messages and completed all 34,404 planned reconnects during the room-burst run.
+Delivery p99 was 1.770 ms and gateway RSS over the final five minutes was 189.88 MiB.
+[Churn report and charts](docs/benchmarks/batch4/churn/README.md)
 
 ## Testing
 
@@ -200,6 +175,9 @@ EX_CABLE_TEST_VALKEY=/absolute/path/to/valkey-server \
   rtk proxy mix test --cover
 ```
 
+Run the [same Rails acceptance test against the Docker image](docs/docker.md#test-the-image)
+to verify the packaged release.
+
 ### Performance and memory tests
 
 The Go load driver exercises the standard Action Cable protocol over loopback. It verifies
@@ -213,11 +191,9 @@ rtk proxy go -C bench test ./...
 rtk proxy go -C bench build -o /tmp/excable-bench .
 ```
 
-See the [comparison and soak commands](docs/benchmarks/README.md#reproduce) and the
-[BEAM memory investigation](docs/benchmarks/beam-memory.md) for the matching workload,
-release profiles and raw data. In the matched 20-minute churn test, the Darwin allocator
-setting reduced peak ExCable RSS from 207.45 to 191.42 MiB. Both profiles completed 11,449
-planned reconnects with zero missing deliveries.
+See the [current comparison commands](docs/benchmarks/current/README.md#reproduce),
+[one-hour churn workloads](docs/benchmarks/batch4/churn/README.md) and
+[BEAM allocator and live-heap measurements](docs/benchmarks/beam-memory.md).
 
 [Architecture](docs/architecture.md) · [Protocols and compatibility](docs/protocol.md) ·
 [Development plan](docs/plan.md) · [Tasks](docs/tasks.md) · [Benchmarks](docs/benchmarks/README.md)

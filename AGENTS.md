@@ -3,6 +3,7 @@
 @/Users/mpak/.codex/RTK.md
 @docs/architecture.md
 @docs/protocol.md
+@docs/docker.md
 @docs/plan.md
 @docs/tasks.md
 
