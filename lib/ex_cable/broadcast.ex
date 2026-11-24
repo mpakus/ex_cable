@@ -20,8 +20,6 @@ defmodule ExCable.Broadcast do
     Registry.unregister_match(@registry, {:stream, stream}, {identifier, :_, :_, :_})
   end
 
-  def join_connection("", _budget), do: :ok
-
   def join_connection(identifiers, budget),
     do: Registry.register(@registry, {:connection, identifiers}, budget)
 
@@ -76,6 +74,8 @@ defmodule ExCable.Broadcast do
   defp excluded_socket(_), do: nil
 
   defp publish({:stream, stream, data, excluded}) do
+    ExCable.Stats.increment(:publications)
+
     Registry.dispatch(@registry, {:stream, stream}, fn entries ->
       Enum.each(entries, fn
         {_, {_, _, ^excluded, _}} ->
@@ -100,7 +100,11 @@ defmodule ExCable.Broadcast do
       if :atomics.add_get(budget, 1, 1) <= @max_pending do
         send(pid, message)
       else
-        if :atomics.exchange(budget, 2, 1) == 0, do: send(pid, :slow_consumer)
+        if :atomics.exchange(budget, 2, 1) == 0 do
+          ExCable.Stats.increment(:slow_consumers)
+          send(pid, :slow_consumer)
+        end
+
         received(budget)
       end
     end

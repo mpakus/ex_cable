@@ -71,6 +71,7 @@ Redis subscription is unavailable. Redis Pub/Sub provides live delivery with no 
 | `ANYCABLE_SECRET` | Derives separate bearer keys for RPC and HTTP broadcasts. |
 | `ANYCABLE_HTTP_RPC_SECRET` | Overrides the derived RPC key. |
 | `ANYCABLE_BROADCAST_KEY` | Overrides the derived broadcast key. Without a key, `/_broadcast` is disabled. |
+| `EX_CABLE_STATS_KEY` | Enables the statistics endpoint and authenticates the CLI. Set it on the server and in the CLI environment. |
 | `EX_CABLE_PUBLIC_URL` | External cable URL. Without it, ExCable uses the upgrade's request URL. |
 | `EX_CABLE_ALLOWED_ORIGINS` | Comma-separated exact browser origins. Defaults to the cable URL's HTTP origin. |
 | `EX_CABLE_PROXY_HEADERS` | Comma-separated lowercase names. Defaults to `cookie,origin,authorization,x-request-id`. |
@@ -87,11 +88,41 @@ MIX_ENV=prod rtk proxy mix release
 rtk proxy _build/prod/rel/ex_cable/bin/ex_cable start
 ```
 
+## Statistics CLI
+
+Set `EX_CABLE_STATS_KEY` before starting ExCable and use the same key in the terminal
+that runs the CLI. The CLI defaults to `http://127.0.0.1:8080`. Use `--url BASE_URL`
+for a different address or HTTPS when connecting across hosts.
+
+```sh
+rtk proxy mix cli                            # Print one snapshot from a running server
+rtk proxy _build/prod/rel/ex_cable/bin/cli -f  # Refresh in place until Ctrl+C
+ELIXIR_ERL_OPTIONS="+Bd" rtk proxy mix cli -f # Follow from a source checkout
+```
+
+The table shows active authenticated WebSockets, stream memberships, accepted broadcast
+POSTs, stream publications from HTTP or Redis, slow consumers flagged for disconnect,
+BEAM memory and processes, and Redis subscription status. Counters are per instance and
+reset when ExCable starts. The first table shows rates since startup. Follow mode then
+shows rates between successful samples, refreshing about once per second.
+
 ## Benchmark results
 
 Loopback on an Apple M4 Max. Each row reports the median of three runs at the same load.
 The [full sweep](docs/benchmarks/capacity.md) covers 8–256 HTTP publishers and fan-out loads
 from 200 to 8,000 offered POSTs/s.
+
+**Cabby led on throughput. ExCable had the lowest WebSocket delivery p99 under saturation.**
+
+- **HTTP without subscribers.** Cabby accepted 164,366 POSTs/s, about **4% more** than
+  ExCable's 158,494. Action Cable accepted 28,007 POSTs/s.
+- **WebSocket fan-out under saturation.** Cabby delivered 471,980 messages/s, **37% more**
+  than ExCable's 344,177. Action Cable delivered 59,810/s. ExCable and Cabby delivered
+  **5.8× and 7.9×** as many messages/s as Action Cable, respectively.
+- **WebSocket tail latency at that load.** ExCable's p99 was **9.58 ms**, about **89% lower**
+  than Cabby's 88.31 ms and **79% lower** than Action Cable's 46.03 ms.
+
+![Benchmark comparison of HTTP POSTs per second, WebSocket deliveries per second, and WebSocket p99 latency for ExCable, Cabby, and Action Cable](docs/benchmarks/capacity-comparison.svg)
 
 ### HTTP ingress
 

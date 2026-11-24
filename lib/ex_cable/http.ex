@@ -41,12 +41,23 @@ defmodule ExCable.HTTP do
         send_resp(conn, 404, "")
 
       secret ->
-        with [auth] <- get_req_header(conn, "authorization"),
-             true <- Plug.Crypto.secure_compare(auth, "Bearer " <> secret) do
-          read_broadcast(conn)
-        else
-          _ -> send_resp(conn, 401, "")
-        end
+        if authorized?(conn, secret), do: read_broadcast(conn), else: send_resp(conn, 401, "")
+    end
+  end
+
+  def call(%{method: "GET", request_path: "/_stats"} = conn, config) do
+    cond do
+      config.stats_key in [nil, ""] ->
+        send_resp(conn, 404, "")
+
+      authorized?(conn, config.stats_key) ->
+        conn
+        |> put_resp_header("cache-control", "no-store")
+        |> put_resp_content_type("application/json")
+        |> send_resp(200, JSON.encode_to_iodata!(ExCable.Stats.snapshot(config)))
+
+      true ->
+        send_resp(conn, 401, "")
     end
   end
 
@@ -58,13 +69,26 @@ defmodule ExCable.HTTP do
 
   def call(conn, _config), do: send_resp(conn, 404, "")
 
+  defp authorized?(conn, secret) do
+    case get_req_header(conn, "authorization") do
+      [auth] -> Plug.Crypto.secure_compare(auth, "Bearer " <> secret)
+      _ -> false
+    end
+  end
+
   defp read_broadcast(conn) do
     limit = ExCable.Broadcast.max_size()
 
     case read_body(conn, length: limit, read_length: limit, read_timeout: 2_000) do
       {:ok, body, conn} when byte_size(body) <= limit ->
-        status = if ExCable.Broadcast.ingest(body) == :ok, do: 201, else: 422
-        send_resp(conn, status, "")
+        case ExCable.Broadcast.ingest(body) do
+          :ok ->
+            ExCable.Stats.increment(:http_broadcasts)
+            send_resp(conn, 201, "")
+
+          :error ->
+            send_resp(conn, 422, "")
+        end
 
       {:ok, _, conn} ->
         send_resp(conn, 413, "")

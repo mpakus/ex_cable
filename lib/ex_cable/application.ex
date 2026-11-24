@@ -4,6 +4,7 @@ defmodule ExCable.Application do
   @impl true
   def start(_type, _args) do
     config = ExCable.Config.from_env(Application.get_env(:ex_cable, :production, false))
+    ExCable.Stats.init()
 
     children = [
       {Registry,

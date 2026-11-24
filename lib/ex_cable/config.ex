@@ -8,6 +8,7 @@ defmodule ExCable.Config do
       rpc_pool_size: 16,
       rpc_timeout: 2_000,
       broadcast_secret: nil,
+      stats_key: nil,
       public_url: nil,
       origins: [],
       proxy_headers: ~w(cookie origin authorization x-request-id),
@@ -32,6 +33,7 @@ defmodule ExCable.Config do
         broadcast_secret:
           get.("ANYCABLE_BROADCAST_KEY") || get.("ANYCABLE_HTTP_BROADCAST_SECRET") ||
             derive(secret, "broadcast-cable"),
+        stats_key: get.("EX_CABLE_STATS_KEY"),
         public_url: url(get.("EX_CABLE_PUBLIC_URL"), ["http", "https", "ws", "wss"]),
         origins: split(get.("EX_CABLE_ALLOWED_ORIGINS"), []),
         proxy_headers: split(get.("EX_CABLE_PROXY_HEADERS"), config.proxy_headers),

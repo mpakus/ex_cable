@@ -1,0 +1,3 @@
+#!/bin/sh
+export ELIXIR_ERL_OPTIONS="${ELIXIR_ERL_OPTIONS:+$ELIXIR_ERL_OPTIONS }+Bd"
+exec "$(dirname "$0")/ex_cable" eval 'ExCable.CLI.main(System.argv())' "$@"

@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 164" role="img" aria-labelledby="title desc">
+  <title id="title">ExCable, Cabby, and Action Cable benchmark comparison</title>
+  <desc id="desc">Median of three trials per server. Cabby leads in HTTP and WebSocket throughput. ExCable has the lowest WebSocket delivery p99 at the highest offered load.</desc>
+  <style>
+    text { fill: #18263a; font: 12px system-ui, sans-serif; }
+    .heading { font-size: 15px; font-weight: 700; }
+    .unit { fill: #475569; }
+    .value { text-anchor: end; font-variant-numeric: tabular-nums; font-weight: 600; }
+    .track { fill: #e7edf5; }
+    .ex { fill: #6541b4; }
+    .cabby { fill: #1372a7; }
+    .rails { fill: #a34132; }
+  </style>
+  <rect x="1" y="1" width="898" height="162" rx="12" fill="#f8fafc" stroke="#d9e2ec"/>
+  <path d="M300 17v130m300-130v130" stroke="#d9e2ec"/>
+  <g transform="translate(16 0)">
+    <text class="heading" y="28">HTTP ingress</text>
+    <text class="unit" y="47">Accepted POSTs/s · higher is better</text>
+    <text y="78">ExCable</text><text y="107">Cabby</text><text y="136">Action Cable</text>
+    <rect class="track" x="83" y="68" width="114" height="12" rx="3"/>
+    <rect class="track" x="83" y="97" width="114" height="12" rx="3"/>
+    <rect class="track" x="83" y="126" width="114" height="12" rx="3"/>
+    <rect class="ex" x="83" y="68" width="106.28" height="12" rx="3"/>
+    <rect class="cabby" x="83" y="97" width="110.22" height="12" rx="3"/>
+    <rect class="rails" x="83" y="126" width="18.78" height="12" rx="3"/>
+    <text class="value" x="265" y="78">158,494</text>
+    <text class="value" x="265" y="107">164,366</text>
+    <text class="value" x="265" y="136">28,007</text>
+  </g>
+  <g transform="translate(316 0)">
+    <text class="heading" y="28">WebSocket fan-out</text>
+    <text class="unit" y="47">Deliveries/s · higher is better</text>
+    <text y="78">ExCable</text><text y="107">Cabby</text><text y="136">Action Cable</text>
+    <rect class="track" x="83" y="68" width="114" height="12" rx="3"/>
+    <rect class="track" x="83" y="97" width="114" height="12" rx="3"/>
+    <rect class="track" x="83" y="126" width="114" height="12" rx="3"/>
+    <rect class="ex" x="83" y="68" width="78.47" height="12" rx="3"/>
+    <rect class="cabby" x="83" y="97" width="107.61" height="12" rx="3"/>
+    <rect class="rails" x="83" y="126" width="13.64" height="12" rx="3"/>
+    <text class="value" x="265" y="78">344,177</text>
+    <text class="value" x="265" y="107">471,980</text>
+    <text class="value" x="265" y="136">59,810</text>
+  </g>
+  <g transform="translate(616 0)">
+    <text class="heading" y="28">WebSocket delivery p99</text>
+    <text class="unit" y="47">Milliseconds · lower is better</text>
+    <text y="78">ExCable</text><text y="107">Cabby</text><text y="136">Action Cable</text>
+    <rect class="track" x="83" y="68" width="114" height="12" rx="3"/>
+    <rect class="track" x="83" y="97" width="114" height="12" rx="3"/>
+    <rect class="track" x="83" y="126" width="114" height="12" rx="3"/>
+    <rect class="ex" x="83" y="68" width="10.92" height="12" rx="3"/>
+    <rect class="cabby" x="83" y="97" width="100.67" height="12" rx="3"/>
+    <rect class="rails" x="83" y="126" width="52.47" height="12" rx="3"/>
+    <text class="value" x="265" y="78">9.58</text>
+    <text class="value" x="265" y="107">88.31</text>
+    <text class="value" x="265" y="136">46.03</text>
+  </g>
+</svg>
