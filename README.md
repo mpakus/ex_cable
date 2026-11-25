@@ -197,3 +197,5 @@ See the [current comparison commands](docs/benchmarks/current/README.md#reproduc
 
 [Architecture](docs/architecture.md) · [Protocols and compatibility](docs/protocol.md) ·
 [Development plan](docs/plan.md) · [Tasks](docs/tasks.md) · [Benchmarks](docs/benchmarks/README.md)
+
+[Made in Austin ✩ Texas](https://aomega.co/)
